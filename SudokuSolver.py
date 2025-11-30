@@ -231,6 +231,8 @@ class SudokuCSP:
         return best_cell
     
     def solve_with_ac3(self, board):
+
+        self.arc_consistency_tree=[]
         self.board = [row[:] for row in board]  # Deep copy
         self.iterations = 0
         self.arc_revisions = 0

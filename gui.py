@@ -18,6 +18,7 @@ class SudokuGUI:
     - Real-time constraint validation
     - Visual feedback for solving process
     - Statistics and logging
+    - Arc Consistency Tree visualization
     """
     
     def __init__(self, root):
@@ -29,12 +30,11 @@ class SudokuGUI:
         """
         self.root = root
         self.root.title("Sudoku CSP Solver with Arc Consistency")
-        self.root.geometry("1100x750")
-        self.root.resizable(False, False)
+        self.root.geometry("1200x800")  # Increased width for AC-3 tree
+        self.root.resizable(True, True)
         
         # Initialize solver
         self.solver = SudokuCSP()
-        
         
         # GUI state variables
         self.cells = [[None for _ in range(9)] for _ in range(9)]
@@ -51,22 +51,22 @@ class SudokuGUI:
         """Setup all UI components"""
         # Main container
         main_frame = ttk.Frame(self.root, padding="10")
-        main_frame.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+        main_frame.pack(fill=tk.BOTH, expand=True)
         
-        # Left panel - Sudoku board
-        self.create_board_panel(main_frame)
+        # Create left and right panes
+        left_pane = ttk.Frame(main_frame)
+        left_pane.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         
-        # Control panel
-        self.create_control_panel(main_frame)
+        right_pane = ttk.Frame(main_frame)
+        right_pane.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
         
-        # Right panel - Information
-        self.create_info_panel(main_frame)
+        # Left panel - Sudoku board and controls
+        self.create_board_panel(left_pane)
+        self.create_control_panel(left_pane)
         
-        # Configure grid weights
-        self.root.columnconfigure(0, weight=1)
-        self.root.rowconfigure(0, weight=1)
-        main_frame.columnconfigure(1, weight=1)
-        main_frame.rowconfigure(0, weight=1)
+        # Right panel - Information and AC-3 Tree
+        self.create_info_panel(right_pane)
+        self.create_ac3_tree_panel(right_pane)
     
     def create_board_panel(self, parent):
         """
@@ -76,7 +76,7 @@ class SudokuGUI:
             parent: Parent widget
         """
         board_frame = ttk.LabelFrame(parent, text="Sudoku Board", padding="10")
-        board_frame.grid(row=0, column=0, padx=5, pady=5, sticky=(tk.N, tk.W, tk.E))
+        board_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
         
         # Create 9x9 grid of entry cells
         for i in range(9):
@@ -109,11 +109,11 @@ class SudokuGUI:
             parent: Parent widget
         """
         control_frame = ttk.LabelFrame(parent, text="Controls", padding="10")
-        control_frame.grid(row=1, column=0, padx=5, pady=5, sticky=(tk.W, tk.E))
+        control_frame.pack(fill=tk.X, padx=5, pady=5)
         
         # Mode selection
         mode_frame = ttk.Frame(control_frame)
-        mode_frame.grid(row=0, column=0, columnspan=3, pady=5, sticky=(tk.W, tk.E))
+        mode_frame.pack(fill=tk.X, pady=5)
         
         ttk.Label(mode_frame, text="Mode:", font=('Arial', 10, 'bold')).pack(side=tk.LEFT, padx=5)
         self.mode_var = tk.StringVar(value='generate')
@@ -124,7 +124,7 @@ class SudokuGUI:
         
         # Difficulty selection
         difficulty_frame = ttk.Frame(control_frame)
-        difficulty_frame.grid(row=1, column=0, columnspan=3, pady=5, sticky=(tk.W, tk.E))
+        difficulty_frame.pack(fill=tk.X, pady=5)
         
         ttk.Label(difficulty_frame, text="Difficulty:", font=('Arial', 10)).pack(side=tk.LEFT, padx=5)
         self.difficulty_var = tk.StringVar(value='medium')
@@ -134,7 +134,7 @@ class SudokuGUI:
         
         # Action buttons
         button_frame = ttk.Frame(control_frame)
-        button_frame.grid(row=2, column=0, columnspan=3, pady=10)
+        button_frame.pack(fill=tk.X, pady=10)
         
         ttk.Button(button_frame, text="Generate Puzzle", 
                   command=self.generate_puzzle).pack(side=tk.LEFT, padx=5)
@@ -145,7 +145,7 @@ class SudokuGUI:
         
         # Additional controls
         extra_frame = ttk.Frame(control_frame)
-        extra_frame.grid(row=3, column=0, columnspan=3, pady=5)
+        extra_frame.pack(fill=tk.X, pady=5)
         
         ttk.Button(extra_frame, text="Save Puzzle", 
                   command=self.save_puzzle).pack(side=tk.LEFT, padx=5)
@@ -158,7 +158,7 @@ class SudokuGUI:
         self.show_domains_var = tk.BooleanVar(value=False)
         ttk.Checkbutton(control_frame, text="Show Domains (after AC-3)", 
                        variable=self.show_domains_var,
-                       command=self.toggle_domains).grid(row=4, column=0, columnspan=3, pady=5)
+                       command=self.toggle_domains).pack(pady=5)
     
     def create_info_panel(self, parent):
         """
@@ -168,7 +168,7 @@ class SudokuGUI:
             parent: Parent widget
         """
         info_frame = ttk.LabelFrame(parent, text="Information & Log", padding="10")
-        info_frame.grid(row=0, column=1, rowspan=2, padx=5, pady=5, sticky=(tk.N, tk.S, tk.W, tk.E))
+        info_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
         
         # Statistics display
         stats_frame = ttk.LabelFrame(info_frame, text="Statistics", padding="10")
@@ -183,7 +183,7 @@ class SudokuGUI:
         log_frame = ttk.LabelFrame(info_frame, text="Solution Log", padding="5")
         log_frame.pack(fill=tk.BOTH, expand=True, pady=5)
         
-        self.log_text = scrolledtext.ScrolledText(log_frame, width=45, height=30, 
+        self.log_text = scrolledtext.ScrolledText(log_frame, width=45, height=15, 
                                                   font=('Courier', 9), wrap=tk.WORD)
         self.log_text.pack(fill=tk.BOTH, expand=True)
         
@@ -192,6 +192,8 @@ class SudokuGUI:
         self.log_text.tag_config('success', foreground='green', font=('Courier', 9, 'bold'))
         self.log_text.tag_config('error', foreground='red', font=('Courier', 9, 'bold'))
         self.log_text.tag_config('info', foreground='black')
+        self.log_text.tag_config('ac3_step', foreground='purple', font=('Courier', 9, 'bold'))
+        self.log_text.tag_config('ac3_detail', foreground='darkblue')
         
         # Initial welcome message
         self.log_message("Welcome to Sudoku CSP Solver!", 'header')
@@ -200,6 +202,37 @@ class SudokuGUI:
         self.log_message("1. Generate a random puzzle or input your own", 'info')
         self.log_message("2. Click 'Solve with AC-3' to see the solution", 'info')
         self.log_message("3. Invalid entries will be highlighted in red\n", 'info')
+    
+    def create_ac3_tree_panel(self, parent):
+        """
+        Create the AC-3 Tree visualization panel
+        
+        Args:
+            parent: Parent widget
+        """
+        ac3_frame = ttk.LabelFrame(parent, text="Arc Consistency (AC-3) Tree", padding="10")
+        ac3_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        
+        # Control buttons for AC-3 tree
+        ac3_control_frame = ttk.Frame(ac3_frame)
+        ac3_control_frame.pack(fill=tk.X, pady=5)
+        
+        ttk.Button(ac3_control_frame, text="Show AC-3 Steps", 
+                  command=self.show_ac3_tree).pack(side=tk.LEFT, padx=5)
+        ttk.Button(ac3_control_frame, text="Clear AC-3 Tree", 
+                  command=self.clear_ac3_tree).pack(side=tk.LEFT, padx=5)
+        
+        # AC-3 Tree display
+        self.ac3_tree_text = scrolledtext.ScrolledText(ac3_frame, width=60, height=20,
+                                                      font=('Courier', 8), wrap=tk.WORD)
+        self.ac3_tree_text.pack(fill=tk.BOTH, expand=True)
+        
+        # Configure text tags for AC-3 tree
+        self.ac3_tree_text.tag_config('step_header', foreground='darkred', font=('Courier', 8, 'bold'))
+        self.ac3_tree_text.tag_config('arc', foreground='blue', font=('Courier', 8, 'bold'))
+        self.ac3_tree_text.tag_config('domain_change', foreground='green')
+        self.ac3_tree_text.tag_config('empty_domain', foreground='red', font=('Courier', 8, 'bold'))
+        self.ac3_tree_text.tag_config('ac3_success', foreground='darkgreen', font=('Courier', 8, 'bold'))
     
     def validate_input(self, value):
         """
@@ -336,6 +369,9 @@ class SudokuGUI:
         self.log_message("Starting AC-3 Algorithm...", 'header')
         self.log_message("="*40, 'header')
         
+        # Clear previous AC-3 tree
+        self.clear_ac3_tree()
+        
         # Update UI
         self.root.update()
         
@@ -363,12 +399,19 @@ class SudokuGUI:
             # Update statistics
             self.update_statistics(solve_time, 'Solved')
             
+            # Show AC-3 tree automatically
+            self.show_ac3_tree()
+            
             messagebox.showinfo("Success", f"Puzzle solved in {solve_time:.4f} seconds!\n\n"
                                          f"Iterations: {self.solver.iterations}\n"
                                          f"Arc Revisions: {self.solver.arc_revisions}")
         else:
             self.log_message("\n✗ Puzzle is unsolvable!", 'error')
             self.update_statistics(0, 'Unsolvable')
+            
+            # Show AC-3 tree even for unsolvable puzzles
+            self.show_ac3_tree()
+            
             messagebox.showerror("Error", "This puzzle has no solution!")
     
     def clear_board(self):
@@ -382,6 +425,7 @@ class SudokuGUI:
         self.current_domains = [[[] for _ in range(9)] for _ in range(9)]
         self.log_message("\n✓ Board cleared!", 'info')
         self.update_statistics(0, 'Ready')
+        self.clear_ac3_tree()
     
     def validate_current_board(self):
         """Validate the current board state"""
@@ -451,6 +495,52 @@ class SudokuGUI:
         self.log_text.insert(tk.END, message + "\n", tag)
         self.log_text.see(tk.END)
         self.root.update()
+    
+    def show_ac3_tree(self):
+        """Display the AC-3 tree in the dedicated panel"""
+        self.ac3_tree_text.delete(1.0, tk.END)
+        
+        if not hasattr(self.solver, 'arc_consistency_tree') or not self.solver.arc_consistency_tree:
+            self.ac3_tree_text.insert(tk.END, "No AC-3 steps recorded.\n")
+            self.ac3_tree_text.insert(tk.END, "Solve a puzzle first to see the AC-3 tree.\n")
+            return
+        
+        self.ac3_tree_text.insert(tk.END, "=== ARC CONSISTENCY (AC-3) TREE ===\n\n", 'step_header')
+        
+        for step_num, log in enumerate(self.solver.arc_consistency_tree, 1):
+            if "arc" in log:
+                xi, xj = log["arc"]
+                self.ac3_tree_text.insert(tk.END, f"Step {step_num}: ", 'step_header')
+                self.ac3_tree_text.insert(tk.END, f"Revising arc {xi} → {xj}\n", 'arc')
+                self.ac3_tree_text.insert(tk.END, f"  Before: {log['before']}\n", 'domain_change')
+                self.ac3_tree_text.insert(tk.END, f"  After:  {log['after']}\n", 'domain_change')
+                
+                # Show if domain became empty
+                if len(log['after']) == 0:
+                    self.ac3_tree_text.insert(tk.END, "  ⚠ DOMAIN BECAME EMPTY - UNSOLVABLE!\n", 'empty_domain')
+                
+                self.ac3_tree_text.insert(tk.END, "\n")
+            
+            elif "checking" in log:
+                xi, xj = log["checking"]
+                self.ac3_tree_text.insert(tk.END, f"Checking arc {xi} → {xj}\n", 'ac3_detail')
+                self.ac3_tree_text.insert(tk.END, f"  Domain Xi: {log['domain_xi']}\n", 'ac3_detail')
+                self.ac3_tree_text.insert(tk.END, f"  Domain Xj: {log['domain_xj']}\n", 'ac3_detail')
+                self.ac3_tree_text.insert(tk.END, "\n")
+        
+        # Add summary
+        self.ac3_tree_text.insert(tk.END, "=== AC-3 SUMMARY ===\n", 'step_header')
+        if self.solver.arc_revisions > 0:
+            self.ac3_tree_text.insert(tk.END, f"Total arc revisions: {self.solver.arc_revisions}\n", 'ac3_success')
+            self.ac3_tree_text.insert(tk.END, f"Total AC-3 steps: {len(self.solver.arc_consistency_tree)}\n", 'ac3_success')
+        else:
+            self.ac3_tree_text.insert(tk.END, "AC-3 was not executed or no revisions were made.\n", 'info')
+        
+        self.ac3_tree_text.see(1.0)  # Scroll to top
+    
+    def clear_ac3_tree(self):
+        """Clear the AC-3 tree display"""
+        self.ac3_tree_text.delete(1.0, tk.END)
     
     def apply_theme(self):
         """Apply custom theme/styling"""
