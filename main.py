@@ -1,9 +1,3 @@
-# File: main.py
-"""
-Main entry point for Sudoku CSP Solver Application
-Runs the GUI application
-"""
-
 import tkinter as tk
 from gui import SudokuGUI
 

@@ -1,4 +1,3 @@
-# File: sudoku_csp.py
 import time
 from collections import deque
 import random
@@ -20,11 +19,11 @@ class SudokuCSP:
                 else:
                     self.domains[i][j] = list(range(1, 10))
     
-    def get_all_arcs(self):
+    def get_all_arcs(self):      #1620 total arcs
         arcs = []
         
         # Row constraints - each pair of cells in same row
-        for i in range(9):   #row
+        for i in range(9):   
             for j in range(9):
                 for k in range(9):
                     if j != k:
@@ -49,11 +48,13 @@ class SudokuCSP:
                 for i in range(len(cells)):
                     for j in range(len(cells)):
                         if i != j:
-                            arcs.append((cells[i], cells[j]))
+                            if (cells[i],cells[j]) not in arcs : 
+                               arcs.append((cells[i], cells[j]))
+                            
         
         return arcs
     
-    def revise(self, xi, xj):
+    def revise(self, xi, xj): # For each value in the domain of Xi, check if there is a consistent value in the domain of Xj
         revised = False
         i1, j1 = xi
         i2, j2 = xj
@@ -62,8 +63,6 @@ class SudokuCSP:
         
         values_to_remove = []
         for value in self.domains[i1][j1]:
-            # Check if there exists a consistent value in domain of Xj
-            # (a value that doesn't conflict with current value)
             has_consistent_value = False
             for other_value in self.domains[i2][j2]:
                 if value != other_value:
@@ -91,7 +90,6 @@ class SudokuCSP:
         return revised
     
     def ac3(self):
-        
         # Initialize queue with all arcs
         queue = deque(self.get_all_arcs())
         self.arc_revisions = 0
@@ -100,7 +98,6 @@ class SudokuCSP:
             xi, xj = queue.popleft()
             self.arc_revisions += 1
             
-            # If Xi's domain was revised
             if self.revise(xi, xj):
                 i, j = xi
                 
@@ -117,15 +114,7 @@ class SudokuCSP:
         return True
     
     def get_neighbors(self, cell):
-        """
-        Get all neighboring cells (cells in same row, column, or 3x3 box)
         
-        Args:
-            cell: Tuple (row, col)
-            
-        Returns:
-            List of neighbor cell coordinates
-        """
         i, j = cell
         neighbors = []
         
@@ -149,18 +138,7 @@ class SudokuCSP:
         return neighbors
     
     def is_valid(self, board, row, col, num):
-        """
-        Check if placing num at (row, col) is valid according to Sudoku rules
         
-        Args:
-            board: Current board state
-            row: Row index
-            col: Column index
-            num: Number to place
-            
-        Returns:
-            True if placement is valid, False otherwise
-        """
         # Check row constraint
         if num in board[row]:
             return False
@@ -207,16 +185,7 @@ class SudokuCSP:
         return False
     
     def find_empty_cell(self, board):
-        """
-        Find next empty cell using Minimum Remaining Values (MRV) heuristic
-        Selects cell with smallest domain (most constrained)
         
-        Args:
-            board: Current board state
-            
-        Returns:
-            Tuple (row, col) of best empty cell, or None if board is full
-        """
         min_domain_size = 10
         best_cell = None
         
@@ -233,7 +202,7 @@ class SudokuCSP:
     def solve_with_ac3(self, board):
 
         self.arc_consistency_tree=[]
-        self.board = [row[:] for row in board]  # Deep copy
+        self.board = [row[:] for row in board]  
         self.iterations = 0
         self.arc_revisions = 0
         
@@ -257,15 +226,13 @@ class SudokuCSP:
         return None, 0  # No solution found
     
     def apply_singleton_domains(self):
-        """
-        Apply values from singleton domains (domains with only one value) to the board
-        This is done after AC-3 to fill in determined cells
-        """
         for i in range(9):
             for j in range(9):
                 if len(self.domains[i][j]) == 1 and self.board[i][j] == 0:
                     self.board[i][j] = self.domains[i][j][0]
-    
+
+#####################################################################################3
+
     def generate_puzzle(self, difficulty='medium'):
         
         # Start with empty board
@@ -311,15 +278,7 @@ class SudokuCSP:
         return puzzle
     
     def validate_board(self, board):
-        """
-        Validate if the board follows Sudoku constraints
-        
-        Args:
-            board: 9x9 2D list
-            
-        Returns:
-            Tuple (is_valid, error_message)
-        """
+       
         # Check rows
         for i in range(9):
             nums = [board[i][j] for j in range(9) if board[i][j] != 0]
@@ -346,12 +305,6 @@ class SudokuCSP:
         return True, "Board is valid"
     
     def get_statistics(self):
-        """
-        Get solving statistics
-        
-        Returns:
-            Dictionary with statistics
-        """
         return {
             'iterations': self.iterations,
             'arc_revisions': self.arc_revisions,

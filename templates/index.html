@@ -1,0 +1,735 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sudoku CSP Solver - Arc Consistency</title>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+            font-family: 'Poppins', sans-serif; 
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 30px;
+            animation: fadeIn 0.8s;
+        }
+        .header h1 { font-size: 2.5em; font-weight: 700; text-shadow: 2px 2px 4px rgba(0,0,0,0.3); }
+        .header p { font-size: 1.1em; margin-top: 10px; opacity: 0.9; }
+        
+        .container { 
+            max-width: 1600px; 
+            margin: 0 auto; 
+            display: grid; 
+            grid-template-columns: 600px 1fr; 
+            gap: 30px; 
+        }
+        
+        .card { 
+            background: white; 
+            border-radius: 20px; 
+            padding: 30px; 
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            animation: slideUp 0.6s;
+        }
+        
+        .board-section { display: flex; flex-direction: column; align-items: center; }
+        
+        .sudoku-board { 
+            display: grid; 
+            grid-template-columns: repeat(9, 55px); 
+            grid-template-rows: repeat(9, 55px); 
+            gap: 0;
+            background: #2c3e50;
+            border: 4px solid #2c3e50;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            margin: 20px 0;
+        }
+        
+        .cell { 
+            background: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            transition: all 0.3s;
+        }
+        
+        .cell::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            border-right: 1px solid #ddd;
+            border-bottom: 1px solid #ddd;
+            pointer-events: none;
+        }
+        
+        .cell:nth-child(3n)::after { border-right: 3px solid #2c3e50; }
+        .cell:nth-child(n+19):nth-child(-n+27)::after,
+        .cell:nth-child(n+46):nth-child(-n+54)::after { border-bottom: 3px solid #2c3e50; }
+        
+        .cell input { 
+            width: 100%; 
+            height: 100%; 
+            border: none; 
+            text-align: center; 
+            font-size: 24px; 
+            font-weight: 600;
+            outline: none;
+            background: transparent;
+            color: #2c3e50;
+        }
+        
+        .cell.original { background: #e8eaf6; }
+        .cell.original input { color: #3f51b5; font-weight: 700; }
+        .cell.solved { background: #c8e6c9; animation: cellSolved 0.5s; }
+        .cell.solved input { color: #2e7d32; }
+        .cell.invalid { background: #ffcdd2; animation: shake 0.5s; }
+        .cell.highlight { background: #fff9c4; animation: pulse 0.8s; }
+        
+        @keyframes cellSolved {
+            0% { transform: scale(0.8); opacity: 0; }
+            50% { transform: scale(1.1); }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-5px); }
+            75% { transform: translateX(5px); }
+        }
+        
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        @keyframes slideUp {
+            from { opacity: 0; transform: translateY(30px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .controls { margin-top: 20px; }
+        .control-group { margin-bottom: 20px; }
+        .control-group label { 
+            display: block; 
+            font-weight: 600; 
+            color: #2c3e50; 
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+        
+        .radio-group { 
+            display: flex; 
+            gap: 15px; 
+            background: #f5f5f5;
+            padding: 10px;
+            border-radius: 10px;
+        }
+        
+        .radio-group label { 
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            font-weight: 400;
+            cursor: pointer;
+            padding: 5px 10px;
+            border-radius: 5px;
+            transition: all 0.3s;
+        }
+        
+        .radio-group label:hover { background: #e0e0e0; }
+        
+        select { 
+            width: 100%;
+            padding: 12px; 
+            border: 2px solid #e0e0e0; 
+            border-radius: 10px; 
+            font-size: 14px;
+            font-family: 'Poppins', sans-serif;
+            transition: all 0.3s;
+        }
+        
+        select:focus { border-color: #667eea; outline: none; }
+        
+        .slider-container {
+            background: #f5f5f5;
+            padding: 15px;
+            border-radius: 10px;
+        }
+        
+        input[type="range"] { 
+            width: 100%; 
+            height: 6px;
+            border-radius: 5px;
+            background: #ddd;
+            outline: none;
+            -webkit-appearance: none;
+        }
+        
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #667eea;
+            cursor: pointer;
+        }
+        
+        .button-group { 
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 10px;
+            margin-top: 20px;
+        }
+        
+        button { 
+            padding: 14px 20px; 
+            border: none; 
+            border-radius: 10px; 
+            font-size: 14px; 
+            font-weight: 600; 
+            cursor: pointer; 
+            transition: all 0.3s;
+            font-family: 'Poppins', sans-serif;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+        
+        button:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(0,0,0,0.15); }
+        button:active { transform: translateY(0); }
+        
+        .btn-primary { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; }
+        .btn-success { background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); color: white; }
+        .btn-danger { background: linear-gradient(135deg, #eb3349 0%, #f45c43 100%); color: white; }
+        .btn-warning { background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); color: white; }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+            margin: 15px 0;
+        }
+        
+        .stat-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 12px;
+            border-radius: 10px;
+            text-align: center;
+            box-shadow: 0 3px 10px rgba(0,0,0,0.1);
+        }
+        
+        .stat-card .value { font-size: 1.4em; font-weight: 700; margin: 5px 0; }
+        .stat-card .label { font-size: 0.75em; opacity: 0.9; }
+        
+        .log-section { margin-top: 20px; }
+        .log-section h3 { 
+            color: #2c3e50; 
+            margin-bottom: 15px;
+            font-size: 1.2em;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .log-container { 
+            background: #f8f9fa; 
+            border: 2px solid #e9ecef;
+            border-radius: 15px; 
+            padding: 20px; 
+            max-height: 250px; 
+            overflow-y: auto;
+            font-family: 'Courier New', monospace; 
+            font-size: 13px;
+        }
+        
+        .log-container::-webkit-scrollbar { width: 8px; }
+        .log-container::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 10px; }
+        .log-container::-webkit-scrollbar-thumb { background: #667eea; border-radius: 10px; }
+        
+        .ac3-container { 
+            background: #f8f9fa; 
+            border: 2px solid #e9ecef;
+            border-radius: 15px; 
+            padding: 20px; 
+            max-height: 500px; 
+            overflow-y: auto;
+            font-family: 'Courier New', monospace; 
+            font-size: 13px;
+        }
+        
+        .ac3-container::-webkit-scrollbar { width: 8px; }
+        .ac3-container::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 10px; }
+        .ac3-container::-webkit-scrollbar-thumb { background: #667eea; border-radius: 10px; }
+        
+        .log-item { 
+            padding: 8px 12px; 
+            margin: 5px 0; 
+            border-radius: 8px;
+            animation: slideIn 0.3s;
+        }
+        
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateX(-10px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+        
+        .log-header { background: #e3f2fd; color: #1976d2; font-weight: 600; }
+        .log-success { background: #e8f5e9; color: #2e7d32; font-weight: 600; }
+        .log-error { background: #ffebee; color: #c62828; font-weight: 600; }
+        .log-info { background: #fff; color: #424242; }
+        
+        .arc-step-card {
+            background: white;
+            border-left: 4px solid #667eea;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 10px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            animation: slideIn 0.3s;
+        }
+        
+        .arc-step-header {
+            color: #667eea;
+            font-weight: 700;
+            font-size: 14px;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .arc-step-header::before {
+            content: '→';
+            font-size: 20px;
+        }
+        
+        .arc-detail-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid #f0f0f0;
+        }
+        
+        .arc-detail-row:last-child { border-bottom: none; }
+        
+        .arc-label { color: #666; font-weight: 600; }
+        .arc-value { color: #2e7d32; font-weight: 600; }
+        .arc-removed { color: #c62828; font-weight: 700; }
+        
+        .badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            margin: 0 3px;
+        }
+        
+        .badge-before { background: #e3f2fd; color: #1976d2; }
+        .badge-after { background: #e8f5e9; color: #2e7d32; }
+        .badge-removed { background: #ffebee; color: #c62828; }
+        
+        #generate-controls, #input-controls { display: none; }
+        
+        .progress-bar {
+            width: 100%;
+            height: 6px;
+            background: #e0e0e0;
+            border-radius: 10px;
+            overflow: hidden;
+            margin: 20px 0;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            width: 0%;
+            transition: width 0.3s;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🧩 Sudoku CSP Solver</h1>
+        <p>Powered by Arc Consistency Algorithm (AC-3)</p>
+    </div>
+    
+    <div class="container">
+        <div class="card board-section">
+            <div class="sudoku-board" id="board"></div>
+            
+            <div class="controls">
+                <div class="control-group">
+                    <label>🎮 Mode</label>
+                    <div class="radio-group">
+                        <label><input type="radio" name="mode" value="generate" checked onchange="updateMode()"> Generate Puzzle</label>
+                        <label><input type="radio" name="mode" value="input" onchange="updateMode()"> Input Puzzle</label>
+                    </div>
+                </div>
+
+                <div class="control-group">
+                    <label>Difficulty</label>
+                    <select id="difficulty">
+                        <option value="easy">Easy</option>
+                        <option value="medium" selected>Medium</option>
+                        <option value="hard">Hard</option>
+                    </select>
+                </div>
+
+                <div class="control-group">
+                    <label>Solve Mode</label>
+                    <div class="radio-group">
+                        <label><input type="radio" name="solveMode" value="step" checked> Step-by-Step</label>
+                        <label><input type="radio" name="solveMode" value="instant"> Instant</label>
+                    </div>
+                </div>
+
+                <div class="control-group">
+                    <label>Animation Speed: <span id="speedValue">100</span>ms</label>
+                    <div class="slider-container">
+                        <input type="range" id="speed" min="20" max="500" value="100" oninput="document.getElementById('speedValue').textContent = this.value">
+                    </div>
+                </div>
+
+                <div id="generate-controls">
+                    <div class="button-group">
+                        <button class="btn-primary" onclick="generatePuzzle()">Generate</button>
+                        <button class="btn-success" onclick="solvePuzzle()">Solve</button>
+                        <button class="btn-warning" onclick="stopSolving()">Stop</button>
+                    </div>
+                </div>
+
+                <div id="input-controls">
+                    <div class="button-group">
+                        <button class="btn-success" onclick="aiContinue()">AI Continue</button>
+                        <button class="btn-warning" onclick="stopSolving()">Stop</button>
+                        <button class="btn-danger" onclick="clearBoard()">Clear</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2 style="color: #2c3e50; margin-bottom: 20px;">Statistics & Analysis</h2>
+            
+            <div class="stats-grid" id="stats">
+                <div class="stat-card">
+                    <div class="label">Status</div>
+                    <div class="value" id="status">Ready</div>
+                </div>
+                <div class="stat-card">
+                    <div class="label">Time</div>
+                    <div class="value" id="time">0.00s</div>
+                </div>
+                <div class="stat-card">
+                    <div class="label">Iterations</div>
+                    <div class="value" id="iterations">0</div>
+                </div>
+                <div class="stat-card">
+                    <div class="label">Arc Revisions</div>
+                    <div class="value" id="revisions">0</div>
+                </div>
+            </div>
+
+            <div class="progress-bar">
+                <div class="progress-fill" id="progress"></div>
+            </div>
+
+            <div class="log-section">
+                <h3>Solution Log</h3>
+                <div class="log-container" id="log"></div>
+            </div>
+
+            <div class="log-section" style="margin-top: 30px;">
+                <h3>🔗 Arc Consistency Revisions</h3>
+                <div class="ac3-container" id="ac3"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let board = Array(9).fill().map(() => Array(9).fill(0));
+        let originalBoard = Array(9).fill().map(() => Array(9).fill(0));
+        let stopFlag = false;
+
+        function initBoard() {
+            const boardEl = document.getElementById('board');
+            boardEl.innerHTML = '';
+            for (let i = 0; i < 9; i++) {
+                for (let j = 0; j < 9; j++) {
+                    const cell = document.createElement('div');
+                    cell.className = 'cell';
+                    const input = document.createElement('input');
+                    input.type = 'text';
+                    input.maxLength = 1;
+                    input.dataset.row = i;
+                    input.dataset.col = j;
+                    input.oninput = (e) => handleInput(e, i, j);
+                    cell.appendChild(input);
+                    boardEl.appendChild(cell);
+                }
+            }
+        }
+
+        function handleInput(e, row, col) {
+            const val = e.target.value;
+            if (val && !/^[1-9]$/.test(val)) {
+                e.target.value = '';
+                return;
+            }
+            
+            if (val && getMode() === 'input') {
+                const num = parseInt(val);
+                board[row][col] = num;
+                validateCell(row, col, num);
+            } else {
+                board[row][col] = 0;
+                e.target.parentElement.classList.remove('invalid');
+            }
+        }
+
+        async function validateCell(row, col, num) {
+            const response = await fetch('/validate', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({board, row, col, num})
+            });
+            const data = await response.json();
+            const cell = document.querySelector(`input[data-row="${row}"][data-col="${col}"]`).parentElement;
+            
+            if (!data.valid) {
+                cell.classList.add('invalid');
+                alert(`❌ Constraint Violation!\n\nNumber ${num} at position (${row+1}, ${col+1}) violates Sudoku rules.\n\nThis number already exists in the same row, column, or 3×3 box.`);
+                document.querySelector(`input[data-row="${row}"][data-col="${col}"]`).value = '';
+                board[row][col] = 0;
+                cell.classList.remove('invalid');
+            } else {
+                cell.classList.remove('invalid');
+            }
+        }
+
+        function updateBoard(newBoard, isOriginal = false) {
+            for (let i = 0; i < 9; i++) {
+                for (let j = 0; j < 9; j++) {
+                    const input = document.querySelector(`input[data-row="${i}"][data-col="${j}"]`);
+                    const cell = input.parentElement;
+                    
+                    if (newBoard[i][j] !== 0) {
+                        input.value = newBoard[i][j];
+                        input.disabled = true;
+                        cell.classList.remove('invalid', 'highlight');
+                        if (isOriginal) {
+                            cell.classList.add('original');
+                            cell.classList.remove('solved');
+                            originalBoard[i][j] = newBoard[i][j];
+                        } else {
+                            cell.classList.add('solved');
+                            if (originalBoard[i][j] !== 0) {
+                                cell.classList.add('original');
+                                cell.classList.remove('solved');
+                            }
+                        }
+                    } else {
+                        input.value = '';
+                        input.disabled = false;
+                        cell.classList.remove('original', 'solved', 'invalid', 'highlight');
+                    }
+                }
+            }
+            board = newBoard.map(row => [...row]);
+        }
+
+        async function generatePuzzle() {
+            const difficulty = document.getElementById('difficulty').value;
+            addLog('🎲 Generating puzzle...', 'header');
+            updateProgress(30);
+            
+            const response = await fetch('/generate', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({difficulty})
+            });
+            const data = await response.json();
+            
+            if (data.board) {
+                updateBoard(data.board, true);
+                addLog(`✅ Generated ${difficulty} puzzle successfully!`, 'success');
+                updateProgress(100);
+                setTimeout(() => updateProgress(0), 1000);
+            } else {
+                addLog('❌ Failed to generate puzzle', 'error');
+                updateProgress(0);
+            }
+        }
+
+        async function solvePuzzle() {
+            const mode = document.querySelector('input[name="solveMode"]:checked').value;
+            stopFlag = false;
+            addLog('Starting solver...', 'header');
+            updateProgress(10);
+            
+            const response = await fetch('/solve', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({board, mode})
+            });
+            const data = await response.json();
+            
+            if (data.success) {
+                updateProgress(50);
+                if (mode === 'step' && data.ac3_steps) {
+                    await animateAC3(data.ac3_steps);
+                }
+                updateProgress(80);
+                updateBoard(data.board, false);
+                updateStats(data);
+                addLog(`Puzzle solved in ${data.time}s!`, 'success');
+                addLog(`Iterations: ${data.iterations} | Arc Revisions: ${data.arc_revisions}`, 'info');
+                updateProgress(100);
+                setTimeout(() => updateProgress(0), 2000);
+            } else {
+                addLog(`❌ ${data.message}`, 'error');
+                updateProgress(0);
+            }
+        }
+
+        async function animateAC3(steps) {
+            const ac3El = document.getElementById('ac3');
+            ac3El.innerHTML = '<div class="arc-step-card"><div class="arc-step-header">🔗 Arc Consistency Algorithm Started</div></div>';
+            const delay = parseInt(document.getElementById('speed').value);
+            
+            for (let i = 0; i < steps.length && !stopFlag; i++) {
+                const step = steps[i];
+                const [r1, c1] = step.arc[0];
+                const [r2, c2] = step.arc[1];
+                
+                // Highlight cells
+                document.querySelector(`input[data-row="${r1}"][data-col="${c1}"]`).parentElement.classList.add('highlight');
+                
+                const removed = step.before.filter(x => !step.after.includes(x));
+                
+                const card = document.createElement('div');
+                card.className = 'arc-step-card';
+                card.innerHTML = `
+                    <div class="arc-step-header">Step ${i+1}: Arc (${r1+1},${c1+1}) → (${r2+1},${c2+1})</div>
+                    <div class="arc-detail-row">
+                        <span class="arc-label">Before:</span>
+                        <span>${step.before.map(v => `<span class="badge badge-before">${v}</span>`).join('')}</span>
+                    </div>
+                    <div class="arc-detail-row">
+                        <span class="arc-label">After:</span>
+                        <span>${step.after.map(v => `<span class="badge badge-after">${v}</span>`).join('')}</span>
+                    </div>
+                    ${removed.length > 0 ? `
+                    <div class="arc-detail-row">
+                        <span class="arc-label">Removed:</span>
+                        <span class="arc-removed">${removed.map(v => `<span class="badge badge-removed">${v}</span>`).join('')}</span>
+                    </div>` : ''}
+                `;
+                
+                ac3El.appendChild(card);
+                ac3El.scrollTop = ac3El.scrollHeight;
+                
+                updateProgress(50 + (i / steps.length) * 30);
+                
+                await new Promise(resolve => setTimeout(resolve, delay));
+                
+                document.querySelector(`input[data-row="${r1}"][data-col="${c1}"]`).parentElement.classList.remove('highlight');
+            }
+        }
+
+        async function aiContinue() {
+            const emptyCount = board.flat().filter(x => x === 0).length;
+            if (emptyCount === 81) {
+                alert('⚠️ Please enter some numbers first!');
+                return;
+            }
+            
+            for (let i = 0; i < 9; i++) {
+                for (let j = 0; j < 9; j++) {
+                    if (board[i][j] !== 0) {
+                        originalBoard[i][j] = board[i][j];
+                        const cell = document.querySelector(`input[data-row="${i}"][data-col="${j}"]`).parentElement;
+                        cell.classList.add('original');
+                    }
+                }
+            }
+            
+            addLog(`AI continuing from your input (${81-emptyCount} cells filled)...`, 'header');
+            await solvePuzzle();
+        }
+
+        function clearBoard() {
+            board = Array(9).fill().map(() => Array(9).fill(0));
+            originalBoard = Array(9).fill().map(() => Array(9).fill(0));
+            updateBoard(board);
+            addLog('Board cleared!', 'info');
+            document.getElementById('ac3').innerHTML = '';
+            updateStats({time: 0, iterations: 0, arc_revisions: 0});
+            document.getElementById('status').textContent = 'Ready';
+        }
+
+        function stopSolving() {
+            stopFlag = true;
+            addLog('Stopped by user', 'error');
+            updateProgress(0);
+        }
+
+        function updateStats(data) {
+            document.getElementById('status').textContent = 'Solved ✓';
+            document.getElementById('time').textContent = data.time + 's';
+            document.getElementById('iterations').textContent = data.iterations;
+            document.getElementById('revisions').textContent = data.arc_revisions;
+        }
+
+        function updateProgress(percent) {
+            document.getElementById('progress').style.width = percent + '%';
+        }
+
+        function addLog(message, type = 'info') {
+            const log = document.getElementById('log');
+            const div = document.createElement('div');
+            div.className = `log-item log-${type}`;
+            div.textContent = message;
+            log.appendChild(div);
+            log.scrollTop = log.scrollHeight;
+        }
+
+        function getMode() {
+            return document.querySelector('input[name="mode"]:checked').value;
+        }
+
+        function updateMode() {
+            const mode = getMode();
+            document.getElementById('generate-controls').style.display = mode === 'generate' ? 'block' : 'none';
+            document.getElementById('input-controls').style.display = mode === 'input' ? 'block' : 'none';
+            
+            if (mode === 'input') {
+                clearBoard();
+                addLog('Input mode: Enter numbers manually', 'info');
+            } else {
+                addLog('Generate mode: Create random puzzles', 'info');
+            }
+        }
+
+        initBoard();
+        updateMode();
+        addLog('👋 Welcome to Sudoku CSP Solver!', 'header');
+        addLog('🔗 Using Arc Consistency (AC-3) Algorithm', 'info');
+    </script>
+</body>
+</html>
