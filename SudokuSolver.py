@@ -89,7 +89,7 @@ class SudokuCSP:
     def ac3(self):
         # Initialize queue with all arcs
         queue = deque(self.get_all_arcs())
-        self.arc_revisions = 0
+        #self.arc_revisions = 0
         
         while queue:
             xi, xj = queue.popleft()
@@ -319,9 +319,9 @@ class SudokuCSP:
         self.board = [row[:] for row in board]
         self.initialize_domains(self.board)
     
-    def count_solutions(self, limit=None):
+    def count_solutions(self, limit=None):     #using backtracking to count solutions
         
-        count = [0]  # Use list to allow modification in nested function
+        count = [0]  
         
         def backtrack_count(board):
             if limit and count[0] >= limit:
