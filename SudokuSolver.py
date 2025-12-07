@@ -19,24 +19,24 @@ class SudokuCSP:
                 else:
                     self.domains[i][j] = list(range(1, 10))
     
-    def get_all_arcs(self):      #1620 total arcs
-        arcs = []
+    def get_all_arcs(self):
+        arcs = set()
         
-        # Row constraints - each pair of cells in same row
+        # Row constraints
         for i in range(9):   
             for j in range(9):
                 for k in range(9):
                     if j != k:
-                        arcs.append(((i, j), (i, k)))
+                        arcs.add(((i, j), (i, k)))
         
-        # Column constraints - each pair of cells in same column
+        # Column constraints
         for j in range(9):
             for i in range(9):
                 for k in range(9):
                     if i != k:
-                        arcs.append(((i, j), (k, j)))
+                        arcs.add(((i, j), (k, j)))
         
-        # 3x3 box constraints - each pair of cells in same box
+        # 3x3 box constraints
         for box_row in range(0, 9, 3):
             for box_col in range(0, 9, 3):
                 cells = []
@@ -44,15 +44,12 @@ class SudokuCSP:
                     for j in range(box_col, box_col + 3):
                         cells.append((i, j))
                 
-                # Create arcs between all pairs in the box
                 for i in range(len(cells)):
                     for j in range(len(cells)):
                         if i != j:
-                            if (cells[i],cells[j]) not in arcs : 
-                               arcs.append((cells[i], cells[j]))
-                            
+                            arcs.add((cells[i], cells[j]))
         
-        return arcs
+        return list(arcs)
     
     def revise(self, xi, xj): # For each value in the domain of Xi, check if there is a consistent value in the domain of Xj
         revised = False
@@ -157,30 +154,50 @@ class SudokuCSP:
         
         return True
     
-    def backtrack_solve(self, board):
+    def backtrack_solve(self, board, first_call=True):
         self.iterations += 1
         
-        # Find next empty cell using MRV heuristic
+        # Only initialize on first call
+        if first_call:
+            self.initialize_domains(board)
+        
+        # Repeat AC-3 + singleton propagation until stable
+        while True:
+            if not self.ac3():
+                return False
+            
+            changed = False
+            for i in range(9):
+                for j in range(9):
+                    if len(self.domains[i][j]) == 1 and board[i][j] == 0:
+                        board[i][j] = self.domains[i][j][0]
+                        changed = True
+            
+            if not changed:
+                break
+        
+        # Check if complete
         empty_cell = self.find_empty_cell(board)
         if not empty_cell:
-            return True  
+            return True
         
         row, col = empty_cell
         
-        # Try values from domain (prioritized by AC-3) or all values 1-9
-        possible_values = self.domains[row][col] if len(self.domains[row][col]) > 0 else range(1, 10)
+        # Save domain state for backtracking
+        saved_domains = [[d[:] for d in row] for row in self.domains]
         
-        for num in possible_values:
+        for num in self.domains[row][col]:
             if self.is_valid(board, row, col, num):
-                # Make assignment
                 board[row][col] = num
+                self.domains[row][col] = [num]
                 
-                # Recursively solve
-                if self.backtrack_solve(board):
+                # Recursive call WITHOUT reinitializing
+                if self.backtrack_solve(board, first_call=False):
                     return True
                 
-                # Backtrack if solution not found
+                # Restore state
                 board[row][col] = 0
+                self.domains = [[d[:] for d in row] for row in saved_domains]
         
         return False
     
@@ -200,7 +217,6 @@ class SudokuCSP:
         return best_cell
     
     def solve_with_ac3(self, board):
-
         self.arc_consistency_tree=[]
         self.board = [row[:] for row in board]  
         self.iterations = 0
@@ -208,22 +224,31 @@ class SudokuCSP:
         
         start_time = time.time()
         
-        # Step 1: Initialize domains based on current board
+        # Initialize domains once
         self.initialize_domains(self.board)
         
-        # Step 2: Apply AC-3 to reduce domains
-        if not self.ac3():
-            return None, 0  # Unsolvable - empty domain found
+        # Interleave AC-3 with singleton propagation
+        while True:
+            if not self.ac3():
+                return None, 0
+            
+            changed = False
+            for i in range(9):
+                for j in range(9):
+                    if len(self.domains[i][j]) == 1 and self.board[i][j] == 0:
+                        self.board[i][j] = self.domains[i][j][0]
+                        self.domains[i][j] = [self.board[i][j]]
+                        changed = True
+            
+            if not changed:
+                break
         
-        # Step 3: Update board with singleton domains
-        self.apply_singleton_domains()
-        
-        # Step 4: Use backtracking for remaining cells (specially appear in hard generated puzzle)
-        if self.backtrack_solve(self.board):
+        # Backtracking for remaining cells (domains already initialized)
+        if self.backtrack_solve(self.board, first_call=False):
             solve_time = time.time() - start_time
             return self.board, solve_time
         
-        return None, 0  # No solution found
+        return None, 0
     
     def apply_singleton_domains(self):
         for i in range(9):
