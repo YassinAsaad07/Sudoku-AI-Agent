@@ -153,8 +153,8 @@ class SudokuCSP:
                     return False
         
         return True
-    
-    def backtrack_solve(self, board, first_call=True):
+####################################Solving using arc consistency + backtracking ##############################    
+    def backtrack_solve(self, board, first_call=True):     
         self.iterations += 1
         
         # Only initialize on first call
@@ -177,16 +177,16 @@ class SudokuCSP:
                 break
         
         # Check if complete
-        empty_cell = self.find_empty_cell(board)
-        if not empty_cell:
+        next_cell = self.MRV_heuristic(board)
+        if not next_cell:
             return True
         
-        row, col = empty_cell
+        row, col = next_cell
         
         # Save domain state for backtracking
         saved_domains = [[d[:] for d in row] for row in self.domains]
         
-        for num in self.domains[row][col]:
+        for num in self.domains[row][col]:           # Try each possible value
             if self.is_valid(board, row, col, num):
                 board[row][col] = num
                 self.domains[row][col] = [num]
@@ -201,7 +201,7 @@ class SudokuCSP:
         
         return False
     
-    def find_empty_cell(self, board):
+    def MRV_heuristic(self, board): # heuristuc MRV 
         
         min_domain_size = 10
         best_cell = None
@@ -232,18 +232,18 @@ class SudokuCSP:
             if not self.ac3():
                 return None, 0
             
-            changed = False
+            Stable = False
             for i in range(9):
                 for j in range(9):
-                    if len(self.domains[i][j]) == 1 and self.board[i][j] == 0:
+                    if len(self.domains[i][j]) == 1 and self.board[i][j] == 0 :     #apply singleton domain until stable
                         self.board[i][j] = self.domains[i][j][0]
                         self.domains[i][j] = [self.board[i][j]]
-                        changed = True
+                        Stable = True
             
-            if not changed:
+            if not Stable:
                 break
         
-        # Backtracking for remaining cells (domains already initialized)
+        # Backtracking for remaining cells after making the board stable (domains already initialized)
         if self.backtrack_solve(self.board, first_call=False):
             solve_time = time.time() - start_time
             return self.board, solve_time
@@ -256,79 +256,96 @@ class SudokuCSP:
                 if len(self.domains[i][j]) == 1 and self.board[i][j] == 0:
                     self.board[i][j] = self.domains[i][j][0]
 
-#####################################################################################3
+##################################Generating Puzzle using backtracking###################################################
 
     def generate_puzzle(self, difficulty='medium'):
-        
-        # Start with empty board
+         
+         # Start with empty board
         board = [[0 for _ in range(9)] for _ in range(9)]
-        
-        # Fill diagonal 3x3 boxes (they don't interfere with each other)
-        for box in range(0, 9, 3):
-            nums = list(range(1, 10))
-            random.shuffle(nums)
-            idx = 0
-            for i in range(box, box + 3):
-                for j in range(box, box + 3):
-                    board[i][j] = nums[idx]
-                    idx += 1
-        
-        # Solve the board using backtrack to get a complete valid solution
-        temp_solver = SudokuCSP()
-        # solved_board, _ = temp_solver.solve_with_ac3(board)
-        
-        # if solved_board is None:
-        #     # If failed, try again
-        #     return self.generate_puzzle(difficulty)
 
-        solved = temp_solver.backtrack_solve(board)
-        if not solved :
-          return self.generate_puzzle(difficulty)
-        # Remove numbers based on difficulty level
+        def backtrack_to_generate(b):       #doesn't used the old backtracking to avoid MRV bias i want everything to be random here
+            for r in range(9):
+                for c in range(9):
+                    if b[r][c] == 0:
+                        nums = list(range(1, 10))
+                        random.shuffle(nums)
+                        for num in nums:
+                            if self.is_valid(b, r, c, num):
+                                b[r][c] = num
+                                if backtrack_to_generate(b):
+                                    return True
+                                b[r][c] = 0
+                        return False
+            return True
+         
+        backtrack_to_generate(board)
+        solution = [row[:] for row in board]
         cells_to_remove = {
             'easy': 30,      # Remove 30 cells 
             'medium': 40,    # Remove 40 cells 
             'hard': 50       # Remove 50 cells 
         }
+
         remove_count = cells_to_remove.get(difficulty, 40)
-        
-        # Create puzzle by removing cells
-        puzzle = [row[:] for row in board]
+
+        # Random order of all cells
         cells = [(i, j) for i in range(9) for j in range(9)]
         random.shuffle(cells)
-        
-        for i, j in cells[:remove_count]:
-            puzzle[i][j] = 0
-        
+
+        puzzle = [row[:] for row in board]
+
+        removed = 0
+        for r, c in cells:
+            if removed >= remove_count:
+                break
+
+            backup = puzzle[r][c]
+            puzzle[r][c] = 0
+
+            if not self.has_unique_solution(puzzle):
+                puzzle[r][c] = backup  # undo
+            else:
+                removed += 1
+
         return puzzle
     
-    def validate_board(self, board):
-       
-        # Check rows
-        for i in range(9):
-            nums = [board[i][j] for j in range(9) if board[i][j] != 0]
-            if len(nums) != len(set(nums)):
-                return False, f"Row {i+1} has duplicate numbers"
-        
-        # Check columns
-        for j in range(9):
-            nums = [board[i][j] for i in range(9) if board[i][j] != 0]
-            if len(nums) != len(set(nums)):
-                return False, f"Column {j+1} has duplicate numbers"
-        
-        # Check 3x3 boxes
-        for box_row in range(0, 9, 3):
-            for box_col in range(0, 9, 3):
-                nums = []
-                for i in range(box_row, box_row + 3):
-                    for j in range(box_col, box_col + 3):
-                        if board[i][j] != 0:
-                            nums.append(board[i][j])
-                if len(nums) != len(set(nums)):
-                    return False, f"Box at ({box_row//3 + 1},{box_col//3 + 1}) has duplicate numbers"
-        
-        return True, "Board is valid"
+
+    def has_unique_solution(self , board):
+            temp = SudokuCSP()
+            temp.load_puzzle([row[:] for row in board])
+            return temp.count_solutions(limit=2) == 1
     
+    def load_puzzle(self, board):
+        self.board = [row[:] for row in board]
+        self.initialize_domains(self.board)
+    
+    def count_solutions(self, limit=None):
+        
+        count = [0]  # Use list to allow modification in nested function
+        
+        def backtrack_count(board):
+            if limit and count[0] >= limit:
+                return  # Stop counting if limit reached
+            
+            empty_cell = self.MRV_heuristic(board)
+            if not empty_cell:
+                count[0] += 1
+                return
+            
+            row, col = empty_cell
+            for num in range(1, 10):
+                if self.is_valid(board, row, col, num):
+                    board[row][col] = num
+                    backtrack_count(board)
+                    board[row][col] = 0
+        
+        # Create a copy to avoid modifying original
+        board_copy = [row[:] for row in self.board]
+        backtrack_count(board_copy)
+        return count[0]
+
+
+######################################## Statictics to be printed ##############################################################3
     def get_statistics(self):
         return {
             'iterations': self.iterations,
@@ -350,3 +367,7 @@ class SudokuCSP:
                 print(f"\nChecking arc {xi} → {xj}")
                 print(f"  Domain Xi: {log['domain_xi']}")
                 print(f"  Domain Xj: {log['domain_xj']}")
+
+
+
+              

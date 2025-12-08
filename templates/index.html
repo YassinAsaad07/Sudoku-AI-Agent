@@ -364,8 +364,7 @@
 </head>
 <body>
     <div class="header">
-        <h1>🧩 Sudoku CSP Solver</h1>
-        <p>Powered by Arc Consistency Algorithm (AC-3)</p>
+        <h1>Sudoku CSP Solver</h1>
     </div>
     
     <div class="container">
@@ -408,13 +407,16 @@
                 <div id="generate-controls">
                     <div class="button-group">
                         <button class="btn-primary" onclick="generatePuzzle()">Generate</button>
+                        <button class="btn-primary" onclick="checkSolvable()">Check Solvable</button>
                         <button class="btn-success" onclick="solvePuzzle()">Solve</button>
                         <button class="btn-warning" onclick="stopSolving()">Stop</button>
+                        <button class="btn-danger" onclick="clearBoard()">Clear</button>
                     </div>
                 </div>
 
                 <div id="input-controls">
                     <div class="button-group">
+                        <button class="btn-primary" onclick="checkSolvable()">Check Solvable</button>
                         <button class="btn-success" onclick="aiContinue()">AI Continue</button>
                         <button class="btn-warning" onclick="stopSolving()">Stop</button>
                         <button class="btn-danger" onclick="clearBoard()">Clear</button>
@@ -492,7 +494,7 @@
                 return;
             }
             
-            if (val && getMode() === 'input') {
+            if (val) {
                 const num = parseInt(val);
                 board[row][col] = num;
                 validateCell(row, col, num);
@@ -502,7 +504,7 @@
             }
         }
 
-        async function validateCell(row, col, num) {
+        async function validateCell(row, col, num) { //bonus
             const response = await fetch('/validate', {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
@@ -649,6 +651,31 @@
                 await new Promise(resolve => setTimeout(resolve, delay));
                 
                 document.querySelector(`input[data-row="${r1}"][data-col="${c1}"]`).parentElement.classList.remove('highlight');
+            }
+        }
+
+        async function checkSolvable() {
+            const emptyCount = board.flat().filter(x => x === 0).length;
+            if (emptyCount === 81) {
+                alert('⚠️ Please enter some numbers first!');
+                return;
+            }
+            
+            addLog('🔍 Checking if puzzle is solvable...', 'header');
+            
+            const response = await fetch('/check_solvable', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({board})
+            });
+            const data = await response.json();
+            
+            if (data.solvable) {
+                alert(`✅ Puzzle is Solvable!\n\n${data.message}\n\nYou can click "AI Continue" to solve it.`);
+                addLog('✅ ' + data.message, 'success');
+            } else {
+                alert(`❌ Puzzle is NOT Solvable!\n\n${data.message}\n\nPlease check your input.`);
+                addLog('❌ ' + data.message, 'error');
             }
         }
 
